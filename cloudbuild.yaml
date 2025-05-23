@@ -80,9 +80,9 @@ steps:
       - --zone=asia-east1-b
       - --project=onyx-antler-459216-j6
 
-  # Step 6: Create startup script on VM to unzip and prepare NuGet repo folder
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'Run startup script on VM'
+  # Step 6: Create startup script locally in Cloud Build environment
+  - name: 'ubuntu'
+    id: 'Create startup script'
     entrypoint: 'bash'
     args:
       - '-c'
@@ -102,14 +102,29 @@ steps:
 
         # Set permissions
         chown -R vij1542044:vij1542044 /home/vij1542044/nuget-packages
-
-        # (Optional) you could start a local NuGet server here if you want, but 
-        # for now just hosting the folder as local repo
-
         EOF
 
-        chmod +x startup.sh
-        gcloud compute ssh vij1542044@my-vm-instance --zone=asia-east1-b --project=onyx-antler-459216-j6 --command="bash /home/vij1542044/startup.sh"
+  # Step 7: Copy startup script to VM
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Copy startup script to VM'
+    args:
+      - compute
+      - scp
+      - startup.sh
+      - vij1542044@my-vm-instance:/home/vij1542044
+      - --zone=asia-east1-b
+      - --project=onyx-antler-459216-j6
+
+  # Step 8: SSH into VM and run startup script
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Run startup script on VM'
+    args:
+      - compute
+      - ssh
+      - vij1542044@my-vm-instance
+      - --zone=asia-east1-b
+      - --project=onyx-antler-459216-j6
+      - --command=bash /home/vij1542044/startup.sh
 
 options:
   logging: CLOUD_LOGGING_ONLY
