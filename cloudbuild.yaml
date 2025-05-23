@@ -1,0 +1,100 @@
+steps:
+  # Build and pack LibA
+  - name: 'mcr.microsoft.com/dotnet/sdk:7.0'
+    id: 'Pack LibA'
+    dir: 'LibA'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        dotnet pack -c Release -o /workspace/output
+
+  # Build and pack LibB
+  - name: 'mcr.microsoft.com/dotnet/sdk:7.0'
+    id: 'Pack LibB'
+    dir: 'LibB'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        dotnet pack -c Release -o /workspace/output
+
+  # Build and pack LibC
+  - name: 'mcr.microsoft.com/dotnet/sdk:7.0'
+    id: 'Pack LibC'
+    dir: 'LibC'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        dotnet pack -c Release -o /workspace/output
+
+  # Create directory for NuGet repo packages and copy .nupkg files
+  - name: 'ubuntu'
+    id: 'Prepare NuGet repo files'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        mkdir -p nuget-packages
+        cp output/*.nupkg nuget-packages/
+
+  # Create NuGet.config file to use local repo on VM
+  - name: 'ubuntu'
+    id: 'Generate NuGet.config'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cat <<EOF > nuget-packages/NuGet.config
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <add key="LocalNugetRepo" value="file:///home/vij1542044/nuget-packages" />
+          </packageSources>
+        </configuration>
+        EOF
+
+  # Create GCE VM instance with needed specs
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Create VM'
+    args:
+      - compute
+      - instances
+      - create
+      - my-vm-instance
+      - --zone=asia-east1-b
+      - --machine-type=e2-micro
+      - --image-family=debian-11
+      - --image-project=debian-cloud
+      - --boot-disk-size=20GB
+      - --tags=http-server
+      - --scopes=https://www.googleapis.com/auth/cloud-platform
+      - --service-account=880653953247-compute@developer.gserviceaccount.com
+      - --project=onyx-antler-459216-j6
+
+  # Copy NuGet repo files (.nupkg + NuGet.config) to VM
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Copy NuGet packages'
+    args:
+      - compute
+      - scp
+      - -r
+      - nuget-packages
+      - vij1542044@my-vm-instance:/home/vij1542044/
+      - --zone=asia-east1-b
+      - --project=onyx-antler-459216-j6
+
+  # SSH to VM and setup folder permissions (optional)
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'Setup permissions on VM'
+    args:
+      - compute
+      - ssh
+      - vij1542044@my-vm-instance
+      - --zone=asia-east1-b
+      - --project=onyx-antler-459216-j6
+      - --command=bash -c "chmod -R 755 /home/vij1542044/nuget-packages"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
